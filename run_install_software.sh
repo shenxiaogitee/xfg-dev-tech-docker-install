@@ -50,14 +50,19 @@ if ! command -v docker-compose &> /dev/null; then
     fi
 fi
 
-# 检查dev-ops目录是否存在
-if [ ! -d "$(pwd)/dev-ops" ]; then
-    error "dev-ops目录不存在，请从 https://github.com/fuzhengwei/xfg-dev-tech-docker-install 下载项目，并上传到云服务器 / 根目录下"
+# 检查software目录是否存在
+if [ ! -d "$(pwd)/software" ]; then
+    error "software目录不存在，请从 https://github.com/fuzhengwei/xfg-dev-tech-docker-install 下载项目，并上传到云服务器 / 根目录下"
 fi
 
 # 检查docker-compose-software.yml文件是否存在
-if [ ! -f "$(pwd)/dev-ops/docker-compose-software.yml" ]; then
-    error "docker-compose-software.yml文件不存在，请检查dev-ops目录是否完整"
+if [ ! -f "$(pwd)/software/docker-compose-software.yml" ]; then
+    error "docker-compose-software.yml文件不存在，请检查software目录是否完整"
+fi
+
+# 检查docker-compose-software-aliyun.yml文件是否存在
+if [ ! -f "$(pwd)/software/docker-compose-software-aliyun.yml" ]; then
+    error "docker-compose-software-aliyun.yml文件不存在，请检查software目录是否完整"
 fi
 
 # 获取当前磁盘空间信息
@@ -77,7 +82,12 @@ declare -A software_sizes=(
     ["redis"]=50
     ["redis-admin"]=50
     ["rabbitmq"]=300
-    ["zookeeper"]=100
+    ["elasticsearch"]=500
+    ["logstash"]=300
+    ["kibana"]=200
+    ["xxl-job-admin"]=150
+    ["prometheus"]=100
+    ["grafana"]=100
 )
 
 # 定义软件的账号密码信息
@@ -88,7 +98,12 @@ declare -A software_credentials=(
     ["redis"]="端口：16379"
     ["redis-admin"]="账号：admin 密码：admin 访问地址：http://服务器IP:8081"
     ["rabbitmq"]="账号：admin 密码：admin 访问地址：http://服务器IP:15672"
-    ["zookeeper"]="端口：2181"
+    ["elasticsearch"]="访问地址：http://服务器IP:9200"
+    ["logstash"]="端口：4560,50000,9600"
+    ["kibana"]="访问地址：http://服务器IP:5601"
+    ["xxl-job-admin"]="账号：admin 密码：123456 访问地址：http://服务器IP:9090/xxl-job-admin"
+    ["prometheus"]="访问地址：http://服务器IP:9090"
+    ["grafana"]="访问地址：http://服务器IP:4000"
 )
 
 # 检查已安装的软件
@@ -101,13 +116,36 @@ check_installed() {
     fi
 }
 
+# 选择使用哪个配置文件
+echo "-----------------------------------------------------------"
+header "选择配置文件："
+echo "-----------------------------------------------------------"
+echo "1. 使用原始配置文件 (推荐，但可能需要从Docker Hub拉取镜像)"
+echo "2. 使用阿里云镜像配置文件 (国内网络环境推荐)"
+echo "-----------------------------------------------------------"
+read -p "请选择配置文件 [1/2] (默认: 1): " config_choice
+config_choice=${config_choice:-1}
+
+if [ "$config_choice" = "1" ]; then
+    compose_file="$(pwd)/software/docker-compose-software.yml"
+    info "已选择使用原始配置文件"
+else
+    compose_file="$(pwd)/software/docker-compose-software-aliyun.yml"
+    info "已选择使用阿里云镜像配置文件"
+fi
+
 # 列出可安装的软件
 echo "-----------------------------------------------------------"
 header "可安装的软件列表："
 echo "-----------------------------------------------------------"
 
 # 创建软件选择数组
-software_list=("nacos" "mysql" "phpmyadmin" "redis" "redis-admin" "rabbitmq" "zookeeper")
+software_list=("nacos" "mysql" "phpmyadmin" "redis" "redis-admin" "rabbitmq" "elasticsearch" "logstash" "kibana")
+
+# 如果选择了原始配置文件，添加只在原始配置中存在的软件
+if [ "$config_choice" = "1" ]; then
+    software_list+=("xxl-job-admin" "prometheus" "grafana")
+fi
 declare -A software_selected
 
 # 显示软件列表及其状态
@@ -161,6 +199,36 @@ done
 echo "总计预计占用空间: ${total_size}MB"
 echo "-----------------------------------------------------------"
 
+# MySQL初始化提示
+if [[ -n "${software_selected[mysql]}" ]]; then
+    echo "-----------------------------------------------------------"
+    header "MySQL初始化提示："
+    echo "-----------------------------------------------------------"
+    info "您选择了安装MySQL，安装完成后可以使用phpmyadmin进行管理"
+    info "如果您希望在初始化时创建数据库和表，可以将SQL脚本放在以下目录："
+    echo "  $(pwd)/software/mysql/sql/"
+    info "目前该目录已包含以下SQL文件："
+    ls -1 "$(pwd)/software/mysql/sql/" | grep ".sql" | while read -r sql_file; do
+        echo "  - $sql_file"
+    done
+    info "您可以添加自己的SQL文件到该目录，它们将在MySQL初始化时自动执行"
+    echo "-----------------------------------------------------------"
+fi
+
+# Prometheus配置提示
+if [[ -n "${software_selected[prometheus]}" ]]; then
+    echo "-----------------------------------------------------------"
+    header "Prometheus配置提示："
+    echo "-----------------------------------------------------------"
+    info "您选择了安装Prometheus，请确保："
+    info "1. 在安装前配置您的应用监控设置："
+    echo "  $(pwd)/software/prometheus/prometheus.yml"
+    info "2. 确保被监控的应用端口已在防火墙中开放"
+    info "3. 当前配置文件中的目标应用为：'system-app:8091'"
+    info "4. 如需监控其他应用，请修改配置文件中的targets部分"
+    echo "-----------------------------------------------------------"
+fi
+
 # 确认安装
 read -p "确认安装以上软件？(y/n): " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -169,8 +237,8 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 fi
 
 # 创建临时的docker-compose文件
-temp_compose_file="$(pwd)/dev-ops/docker-compose-temp.yml"
-cp "$(pwd)/dev-ops/docker-compose-software.yml" "$temp_compose_file"
+temp_compose_file="$(pwd)/software/docker-compose-temp.yml"
+cp "$compose_file" "$temp_compose_file"
 
 # 处理已安装的软件
 for software in "${!software_selected[@]}"; do
@@ -198,7 +266,7 @@ sed -i '/^services:/,$d' "$temp_compose_file"
 echo "services:" >> "$temp_compose_file"
 
 # 从原始文件中提取选中的服务配置
-original_file="$(pwd)/dev-ops/docker-compose-software.yml"
+original_file="$compose_file"
 for software in "${!software_selected[@]}"; do
     # 提取服务配置块
     awk -v service="$software:" 'BEGIN {flag=0; found=0;}
@@ -246,7 +314,7 @@ awk '/^networks:/,0' "$original_file" >> "$temp_compose_file"
 
 # 执行docker-compose
 info "开始安装选中的软件..."
-cd "$(pwd)/dev-ops"
+cd "$(pwd)/software"
 docker-compose -f docker-compose-temp.yml up -d
 
 # 检查安装结果
@@ -257,16 +325,41 @@ if [ $? -eq 0 ]; then
     for software in "${!software_selected[@]}"; do
         if check_installed "$software"; then
             echo "- $software: ${software_credentials[$software]}"
+            
+            # MySQL安装后的提示
+            if [ "$software" = "mysql" ]; then
+                info "MySQL已安装成功，您可以使用phpmyadmin进行管理"
+                info "初始化SQL脚本已自动执行，包括："
+                ls -1 "$(pwd)/mysql/sql/" | grep ".sql" | while read -r sql_file; do
+                    echo "  - $sql_file"
+                done
+            fi
+            
+            # Prometheus安装后的提示
+            if [ "$software" = "prometheus" ]; then
+                info "Prometheus已安装成功，请确保："
+                info "1. 被监控的应用已正确配置并开放端口"
+                info "2. 如需修改监控配置，请编辑：$(pwd)/prometheus/prometheus.yml"
+                info "3. 修改配置后需要重启Prometheus：docker restart prometheus"
+            fi
         else
             warning "$software 安装失败"
+            if [ "$config_choice" = "1" ]; then
+                warning "可能是因为网络问题无法拉取镜像，建议尝试使用阿里云镜像配置文件重新安装"
+                warning "重新运行脚本并选择选项2使用阿里云镜像配置文件"
+            fi
         fi
     done
     echo "-----------------------------------------------------------"
-    info "如需修改账号密码，请编辑 $(pwd)/dev-ops/docker-compose-software.yml 文件"
+    info "如需修改账号密码，请编辑 $compose_file 文件"
     info "修改后，重新运行此脚本即可更新配置"
     
     # 清理临时文件
     rm -f "$temp_compose_file"
 else
     error "软件安装失败，请查看上面的错误信息"
+    if [ "$config_choice" = "1" ]; then
+        warning "可能是因为网络问题无法拉取镜像，建议尝试使用阿里云镜像配置文件重新安装"
+        warning "重新运行脚本并选择选项2使用阿里云镜像配置文件"
+    fi
 fi
