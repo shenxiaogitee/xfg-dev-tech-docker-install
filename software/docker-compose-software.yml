@@ -245,6 +245,8 @@ services:
     restart: unless-stopped
     ports:
       - "11434:11434"
+  networks:
+    - my-network    
 
   pgvector:
     image: pgvector/pgvector:0.7.4-pg16
