@@ -333,22 +333,36 @@ echo "services:" >> "$temp_compose_file"
 original_file="$compose_file"
 for software in "${!software_selected[@]}"; do
     # 提取服务配置块
-    awk -v service="$software:" 'BEGIN {flag=0; found=0;}
-    $0 ~ "^  "service {flag=1; found=1;}
-    flag && /^  [a-zA-Z]/ && $0 !~ "^  "service {flag=0;}
-    flag {print;}
+    awk -v service="$software:" '
+    BEGIN {flag=0; found=0; indent_level=0;}
+    $0 ~ "^  "service {flag=1; found=1; indent_level=2;}
+    flag && flag==1 {
+        current_indent = match($0, /[^ ]/) - 1;
+        if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
+            flag=0;
+        } else if (current_indent > indent_level || $0 ~ "^  "service) {
+            print;
+        }
+    }
     END {exit !found;}' "$original_file" >> "$temp_compose_file"
     
     # 如果是依赖于其他服务的，确保依赖的服务也被安装
-    if grep -q "depends_on:" <<< "$(awk -v service="$software:" 'BEGIN {flag=0;}
-    $0 ~ "^  "service {flag=1;}
-    flag && /^  [a-zA-Z]/ && $0 !~ "^  "service {flag=0;}
-    flag {print;}' "$original_file")"; then
+    if grep -q "depends_on:" <<< "$(awk -v service="$software:" '
+    BEGIN {flag=0; indent_level=0;}
+    $0 ~ "^  "service {flag=1; indent_level=2;}
+    flag && flag==1 {
+        current_indent = match($0, /[^ ]/) - 1;
+        if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
+            flag=0;
+        } else if (current_indent > indent_level || $0 ~ "^  "service) {
+            print;
+        }
+    }' "$original_file")"; then
         # 提取依赖服务
         depends=$(awk -v service="$software:" 'BEGIN {flag=0;}
         $0 ~ "^  "service {flag=1;}
         flag && /depends_on:/ {flag=2;}
-        flag==2 && /^      [a-zA-Z]/ {print $1;}
+        flag==2 && /^      [a-zA-Z]/ {gsub(/:/, "", $1); print $1;}
         flag && /^  [a-zA-Z]/ && $0 !~ "^  "service {flag=0;}' "$original_file")
         
         for dep in $depends; do
@@ -359,10 +373,17 @@ for software in "${!software_selected[@]}"; do
                     info "将同时安装 $dep"
                     software_selected[$dep]=1
                     # 提取依赖服务配置块
-                    awk -v service="$dep:" 'BEGIN {flag=0; found=0;}
-                    $0 ~ "^  "service {flag=1; found=1;}
-                    flag && /^  [a-zA-Z]/ && $0 !~ "^  "service {flag=0;}
-                    flag {print;}
+                    awk -v service="$dep:" '
+                    BEGIN {flag=0; found=0; indent_level=0;}
+                    $0 ~ "^  "service {flag=1; found=1; indent_level=2;}
+                    flag && flag==1 {
+                        current_indent = match($0, /[^ ]/) - 1;
+                        if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
+                            flag=0;
+                        } else if (current_indent > indent_level || $0 ~ "^  "service) {
+                            print;
+                        }
+                    }
                     END {exit !found;}' "$original_file" >> "$temp_compose_file"
                 else
                     warning "$software 可能无法正常工作，因为缺少依赖 $dep"
@@ -372,9 +393,11 @@ for software in "${!software_selected[@]}"; do
     fi
 done
 
-# 添加网络配置
-echo "" >> "$temp_compose_file"
-awk '/^networks:/,0' "$original_file" >> "$temp_compose_file"
+# 添加网络配置（只有当临时文件中还没有networks配置时才添加）
+if ! grep -q "^networks:" "$temp_compose_file"; then
+    echo "" >> "$temp_compose_file"
+    awk '/^networks:/,0' "$original_file" >> "$temp_compose_file"
+fi
 
 # 执行docker-compose
 info "开始安装选中的软件..."
