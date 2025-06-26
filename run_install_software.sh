@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# 启用调试模式（可选）
+export DEBUG=0
+
 # 设置颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -23,6 +26,12 @@ error() {
 
 header() {
     echo -e "${BLUE}[HEADER]${NC} $1"
+}
+
+debug() {
+    if [ "${DEBUG:-0}" = "1" ]; then
+        echo -e "${YELLOW}[DEBUG]${NC} $1"
+    fi
 }
 
 # 检查是否以root用户运行
@@ -300,9 +309,87 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
+# 检查并自动添加依赖服务
+info "正在检查服务依赖关系..."
+original_file="$compose_file"
+declare -A dependencies_added
+
+# 测试依赖提取功能
+test_dependency_extraction() {
+    debug "测试pgvector-admin的依赖提取"
+    local test_deps=$(awk -v service="phpmyadmin:" 'BEGIN {flag=0;}
+    $0 ~ service {flag=1;}
+    flag && /depends_on:/ {flag=2;}
+    flag==2 && /^      - / {gsub(/^      - /, ""); print $0; next;}
+    flag==2 && /^      [a-zA-Z][a-zA-Z0-9_-]*:/ {gsub(/^      /, ""); gsub(/:.*$/, ""); print $0; next;}
+    flag==2 && /^  [a-zA-Z]/ {exit;}
+    ' "$compose_file")
+    debug "测试结果: '$test_deps'"
+}
+
+# 依赖提取逻辑已修复，支持多种depends_on格式
+
+# 递归检查依赖函数
+check_and_add_dependencies() {
+    local service=$1
+    debug "正在检查 $service 的依赖关系"
+    local deps=$(awk -v service="$service:" 'BEGIN {flag=0;}
+    $0 ~ "^  "service {flag=1;}
+    flag && /depends_on:/ {flag=2;}
+    flag==2 && /^      - / {gsub(/^      - /, ""); print $0; next;}
+    flag==2 && /^      [a-zA-Z][a-zA-Z0-9_-]*:/ {gsub(/^      /, ""); gsub(/:.*$/, ""); print $0; next;}
+    flag==2 && /^  [a-zA-Z]/ {exit;}' "$compose_file")
+    
+    if [ -n "$deps" ]; then
+        debug "发现 $service 的依赖: $deps"
+    else
+        debug "$service 无依赖或依赖提取失败"
+    fi
+    
+    for dep in $deps; do
+        # 排除网络配置项
+        if [[ "$dep" == "my-network" ]] || [[ "$dep" =~ -network$ ]]; then
+            continue
+        fi
+        
+        if [ -z "${software_selected[$dep]}" ] && [ -z "${dependencies_added[$dep]}" ]; then
+            if check_installed "$dep"; then
+                info "$service 依赖的 $dep 已安装，将自动包含在配置中"
+                software_selected[$dep]=1
+                dependencies_added[$dep]=1
+                # 递归检查这个依赖的依赖
+                check_and_add_dependencies "$dep"
+            else
+                warning "$service 依赖于 $dep，但 $dep 未被选中安装"
+                read -p "是否同时安装 $dep？(y/n): " install_dep
+                if [[ "$install_dep" =~ ^[Yy]$ ]]; then
+                    info "将同时安装 $dep"
+                    software_selected[$dep]=1
+                    dependencies_added[$dep]=1
+                    # 递归检查这个依赖的依赖
+                    check_and_add_dependencies "$dep"
+                else
+                    warning "$service 可能无法正常工作，因为缺少依赖 $dep"
+                fi
+            fi
+        fi
+    done
+}
+
+# 为每个选中的服务检查依赖
+for software in "${!software_selected[@]}"; do
+    check_and_add_dependencies "$software"
+done
+
 # 创建临时的docker-compose文件
 temp_compose_file="$(pwd)/software/docker-compose-temp.yml"
 cp "$compose_file" "$temp_compose_file"
+
+# 创建需要实际安装的服务数组
+declare -A services_to_install
+for software in "${!software_selected[@]}"; do
+    services_to_install[$software]=1
+done
 
 # 处理已安装的软件
 for software in "${!software_selected[@]}"; do
@@ -312,15 +399,15 @@ for software in "${!software_selected[@]}"; do
             info "将重新安装 $software"
             docker rm -f "$software" &> /dev/null
         else
-            info "跳过安装 $software"
-            unset software_selected[$software]
+            info "跳过安装 $software，但保留在配置中以满足依赖关系"
+            unset services_to_install[$software]
         fi
     fi
 done
 
 # 如果没有软件需要安装，则退出
-if [ ${#software_selected[@]} -eq 0 ]; then
-    info "没有需要安装的软件，安装已取消"
+if [ ${#services_to_install[@]} -eq 0 ]; then
+    info "所有选中的软件都已安装，无需重新安装"
     rm -f "$temp_compose_file"
     exit 0
 fi
@@ -346,70 +433,7 @@ for software in "${!software_selected[@]}"; do
     }
     END {exit !found;}' "$original_file" >> "$temp_compose_file"
     
-    # 如果是依赖于其他服务的，确保依赖的服务也被安装
-    if grep -q "depends_on:" <<< "$(awk -v service="$software:" '
-    BEGIN {flag=0; indent_level=0;}
-    $0 ~ "^  "service {flag=1; indent_level=2;}
-    flag && flag==1 {
-        current_indent = match($0, /[^ ]/) - 1;
-        if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
-            flag=0;
-        } else if (current_indent > indent_level || $0 ~ "^  "service) {
-            print;
-        }
-    }' "$original_file")"; then
-        # 提取依赖服务
-        depends=$(awk -v service="$software:" 'BEGIN {flag=0;}
-        $0 ~ "^  "service {flag=1;}
-        flag && /depends_on:/ {flag=2;}
-        flag==2 && /^      [a-zA-Z]/ {gsub(/:/, "", $1); print $1;}
-        flag && /^  [a-zA-Z]/ && $0 !~ "^  "service {flag=0;}' "$original_file")
-        
-        for dep in $depends; do
-            if [ -z "${software_selected[$dep]}" ]; then
-                # 检查依赖服务是否已经安装
-                if check_installed "$dep"; then
-                    info "$software 依赖的 $dep 已安装，将自动包含在配置中"
-                    software_selected[$dep]=1
-                    # 提取依赖服务配置块
-                    awk -v service="$dep:" '
-                    BEGIN {flag=0; found=0; indent_level=0;}
-                    $0 ~ "^  "service {flag=1; found=1; indent_level=2;}
-                    flag && flag==1 {
-                        current_indent = match($0, /[^ ]/) - 1;
-                        if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
-                            flag=0;
-                        } else if (current_indent > indent_level || $0 ~ "^  "service) {
-                            print;
-                        }
-                    }
-                    END {exit !found;}' "$original_file" >> "$temp_compose_file"
-                else
-                    warning "$software 依赖于 $dep，但 $dep 未被选中安装"
-                    read -p "是否同时安装 $dep？(y/n): " install_dep
-                    if [[ "$install_dep" =~ ^[Yy]$ ]]; then
-                        info "将同时安装 $dep"
-                        software_selected[$dep]=1
-                        # 提取依赖服务配置块
-                        awk -v service="$dep:" '
-                        BEGIN {flag=0; found=0; indent_level=0;}
-                        $0 ~ "^  "service {flag=1; found=1; indent_level=2;}
-                        flag && flag==1 {
-                            current_indent = match($0, /[^ ]/) - 1;
-                            if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
-                                flag=0;
-                            } else if (current_indent > indent_level || $0 ~ "^  "service) {
-                                print;
-                            }
-                        }
-                        END {exit !found;}' "$original_file" >> "$temp_compose_file"
-                    else
-                        warning "$software 可能无法正常工作，因为缺少依赖 $dep"
-                    fi
-                fi
-            fi
-        done
-    fi
+    # 依赖关系已在前面处理，这里只需要提取配置
 done
 
 # 添加网络配置（只有当临时文件中还没有networks配置时才添加）
@@ -418,10 +442,21 @@ if ! grep -q "^networks:" "$temp_compose_file"; then
     awk '/^networks:/,0' "$original_file" >> "$temp_compose_file"
 fi
 
-# 执行docker-compose
+# 执行docker-compose，只启动需要安装的服务
 info "开始安装选中的软件..."
 cd "$(pwd)/software"
-docker-compose -f docker-compose-temp.yml up -d
+
+# 构建需要启动的服务列表
+services_to_start=()
+for service in "${!services_to_install[@]}"; do
+    services_to_start+=("$service")
+done
+
+if [ ${#services_to_start[@]} -gt 0 ]; then
+    docker-compose -f docker-compose-temp.yml up -d "${services_to_start[@]}"
+else
+    info "没有需要启动的新服务"
+fi
 
 # 检查安装结果
 if [ $? -eq 0 ]; then
