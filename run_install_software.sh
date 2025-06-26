@@ -367,10 +367,9 @@ for software in "${!software_selected[@]}"; do
         
         for dep in $depends; do
             if [ -z "${software_selected[$dep]}" ]; then
-                warning "$software 依赖于 $dep，但 $dep 未被选中安装"
-                read -p "是否同时安装 $dep？(y/n): " install_dep
-                if [[ "$install_dep" =~ ^[Yy]$ ]]; then
-                    info "将同时安装 $dep"
+                # 检查依赖服务是否已经安装
+                if check_installed "$dep"; then
+                    info "$software 依赖的 $dep 已安装，将自动包含在配置中"
                     software_selected[$dep]=1
                     # 提取依赖服务配置块
                     awk -v service="$dep:" '
@@ -386,7 +385,27 @@ for software in "${!software_selected[@]}"; do
                     }
                     END {exit !found;}' "$original_file" >> "$temp_compose_file"
                 else
-                    warning "$software 可能无法正常工作，因为缺少依赖 $dep"
+                    warning "$software 依赖于 $dep，但 $dep 未被选中安装"
+                    read -p "是否同时安装 $dep？(y/n): " install_dep
+                    if [[ "$install_dep" =~ ^[Yy]$ ]]; then
+                        info "将同时安装 $dep"
+                        software_selected[$dep]=1
+                        # 提取依赖服务配置块
+                        awk -v service="$dep:" '
+                        BEGIN {flag=0; found=0; indent_level=0;}
+                        $0 ~ "^  "service {flag=1; found=1; indent_level=2;}
+                        flag && flag==1 {
+                            current_indent = match($0, /[^ ]/) - 1;
+                            if (current_indent <= indent_level && $0 !~ "^  "service && /^  [a-zA-Z][a-zA-Z0-9_-]*:/) {
+                                flag=0;
+                            } else if (current_indent > indent_level || $0 ~ "^  "service) {
+                                print;
+                            }
+                        }
+                        END {exit !found;}' "$original_file" >> "$temp_compose_file"
+                    else
+                        warning "$software 可能无法正常工作，因为缺少依赖 $dep"
+                    fi
                 fi
             fi
         done
