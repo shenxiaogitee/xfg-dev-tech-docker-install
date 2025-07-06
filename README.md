@@ -9,7 +9,7 @@
 
 说实话，做项目不上线，等于吃面不配蒜🧄，效果少一半！面试官也说：“所有做Java编程项目，没有上线云服务器的，一律当玩具看！” 是呀，做完项目不上线，是不你做的项目没法运行，是个小卡拉米练手的？🤔 那怎么办？
 
-其实，上线云服务器非常非常简单，而且云服务器价格也非常非常便宜！趁着618活动月，**28块钱**，都能买一年的云服务器☁️，干嘛不上车！
+其实，上线云服务器非常非常简单，而且云服务器价格也非常非常便宜！趁618活动月，**28块钱**，都能买一年的云服务器☁️，干嘛不上车！
 
 <div align="center">
     <img src="https://bugstack.cn/images/system/zsxq/xingqiu-231018-00.png" width="200px">
@@ -78,6 +78,9 @@ chmod +x environment/jdk/install-java.sh
 chmod +x environment/jdk/remove-java.sh
 chmod +x run_install_docker_local.sh
 chmod +x run_install_software.sh
+chmod +x install-maven.sh
+chmod +x remove-maven.sh
+
 ```
 或者一次性为所有脚本添加权限：
 
@@ -148,6 +151,36 @@ sudo ./environment/jdk/remove-java.sh --no-backup
 - 需要 root 权限执行
 - 会自动备份配置文件（除非使用 --no-backup）
 - 清理系统和用户级环境变量配置
+
+### 2.3 Maven 安装脚本
+
+#### 2.3.1 安装 Maven
+
+脚本位置：`environment/maven/install-maven.sh`
+
+功能：自动安装 Apache Maven 3.8.8
+
+执行方式：
+
+```bash
+# 交互式安装（推荐）
+sudo ./environment/maven/install-maven.sh
+
+# 自定义安装目录
+sudo ./environment/maven/install-maven.sh -d /opt/maven
+
+# 使用本地Maven包
+sudo ./environment/maven/install-maven.sh -p /path/to/apache-maven-3.8.8.zip
+
+# 强制安装（覆盖已有安装）
+sudo ./environment/maven/install-maven.sh -f
+
+# 静默安装
+sudo ./environment/maven/install-maven.sh -q
+
+# 强制静默安装
+sudo ./environment/maven/install-maven.sh -f -q
+```
 
 ### 3. Docker 安装脚本
 
@@ -247,14 +280,24 @@ sudo systemctl start docker
    ```
    sudo ./environment/jdk/install-java.sh -v 8
    ```
+   
 2. 然后安装 Docker ：
 
    ```
    ./run_install_docker_local.sh
    ```
-3. 最后安装开发软件 ：
+
+3. 然后安装 Docker ：
+
+   ```
+   ./install-maven.sh
+   ```
+   
+4. 最后安装开发软件 ：
 
    ```
    sudo ./run_install_software.sh
    ```
    按照以上步骤，您就可以成功执行所有脚本并搭建完整的开发环境。
+
+

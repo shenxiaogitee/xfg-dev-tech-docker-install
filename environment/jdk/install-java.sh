@@ -39,7 +39,8 @@ JDK_CONFIGS["17"]="jdk-17.0.14_linux-x64_bin.tar.gz|https://drive.weixin.qq.com/
 
 # 默认配置参数
 DEFAULT_INSTALL_DIR="/usr/local/java"
-DEFAULT_SOURCE_DIR="/dev-ops/java"
+DEFAULT_SOURCE_DIR="$(dirname "$0")"
+JDK_PACKAGE_8="jdk-8u202-linux-x64.tar.gz"
 PROFILE_FILE="/etc/profile"
 BASHRC_FILE="/etc/bashrc"
 
@@ -247,18 +248,21 @@ prompt_manual_download() {
         return 0
     fi
     
+    # 获取脚本的完整路径
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
+    
     # 提示手动下载
     echo
     log_warning "=== 需要手动下载JDK包 ==="
     log_info "下载地址: $JDK_DOWNLOAD_URL"
     log_info "文件名: $JDK_PACKAGE"
-    log_info "保存路径: $SOURCE_DIR"
+    log_info "保存路径: $script_dir"
     echo
     log_info "请按以下步骤操作："
     echo "1. 访问上述下载地址"
     echo "2. 登录微信网盘并下载文件"
     echo "3. 将下载的文件重命名为: $JDK_PACKAGE"
-    echo "4. 将文件上传到服务器的目录: $SOURCE_DIR"
+    echo "4. 将文件上传到服务器的目录: $script_dir"
     echo
     
     # 等待用户下载
@@ -271,7 +275,7 @@ prompt_manual_download() {
         
         if [[ ! -f "$package_path" ]]; then
             log_warning "未找到文件: $package_path"
-            log_info "请确认文件已正确上传到指定目录"
+            log_info "请确认文件已正确上传到指定目录: $script_dir"
         fi
     done
     
