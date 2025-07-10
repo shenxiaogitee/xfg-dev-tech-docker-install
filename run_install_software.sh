@@ -333,12 +333,33 @@ test_dependency_extraction() {
 check_and_add_dependencies() {
     local service=$1
     debug "正在检查 $service 的依赖关系"
-    local deps=$(awk -v service="$service:" 'BEGIN {flag=0;}
-    $0 ~ "^  "service {flag=1;}
-    flag && /depends_on:/ {flag=2;}
-    flag==2 && /^      - / {gsub(/^      - /, ""); print $0; next;}
-    flag==2 && /^      [a-zA-Z][a-zA-Z0-9_-]*:/ {gsub(/^      /, ""); gsub(/:.*$/, ""); print $0; next;}
-    flag==2 && /^  [a-zA-Z]/ {exit;}' "$compose_file")
+    
+    # 修复的依赖提取逻辑，正确识别服务块边界
+    local deps=$(awk -v service="$service:" '
+    BEGIN {flag=0; in_depends=0;}
+    # 匹配服务开始
+    $0 ~ "^  "service {flag=1; in_depends=0; next;}
+    # 如果在服务块中且遇到新的服务，退出
+    flag==1 && /^  [a-zA-Z][a-zA-Z0-9_-]*:/ && $0 !~ "^  "service {exit;}
+    # 找到depends_on
+    flag==1 && /^    depends_on:/ {in_depends=1; next;}
+    # 在depends_on块中，处理依赖项
+    flag==1 && in_depends==1 {
+        # 如果遇到同级别的配置项，退出depends_on块
+        if (/^    [a-zA-Z]/) {in_depends=0;}
+        # 处理列表格式的依赖: - service_name
+        else if (/^      - [a-zA-Z]/) {
+            gsub(/^      - /, "");
+            gsub(/:.*$/, "");
+            print $0;
+        }
+        # 处理对象格式的依赖: service_name:
+        else if (/^      [a-zA-Z][a-zA-Z0-9_-]*:/) {
+            gsub(/^      /, "");
+            gsub(/:.*$/, "");
+            print $0;
+        }
+    }' "$compose_file")
     
     if [ -n "$deps" ]; then
         debug "发现 $service 的依赖: $deps"
@@ -347,8 +368,14 @@ check_and_add_dependencies() {
     fi
     
     for dep in $deps; do
-        # 排除网络配置项
-        if [[ "$dep" == "my-network" ]] || [[ "$dep" =~ -network$ ]]; then
+        # 排除网络配置项和空值
+        if [[ "$dep" == "my-network" ]] || [[ "$dep" =~ -network$ ]] || [[ -z "$dep" ]]; then
+            continue
+        fi
+        
+        # 验证依赖是否是有效的服务名（只包含字母、数字、下划线、连字符）
+        if [[ ! "$dep" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
+            debug "跳过无效的依赖名称: $dep"
             continue
         fi
         
