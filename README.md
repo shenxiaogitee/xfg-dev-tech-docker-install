@@ -66,7 +66,7 @@
 - **地址**：<https://github.com/fuzhengwei/xfg-dev-tech-docker-install>
 - **地址**：<https://gitcode.com/Yao__Shun__Yu/xfg-dev-tech-docker-install>
 
-本文档介绍如何执行项目中的各个脚本，包括权限设置和执行步骤。
+本文档介绍如何执行项目中的各个脚本，包括权限设置和执行步骤。操作视频：[https://www.bilibili.com/video/BV1oaNazEEf5](https://www.bilibili.com/video/BV1oaNazEEf5)
 
 ### 1. 脚本权限设置
 
