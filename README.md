@@ -60,11 +60,11 @@
 - 2c4g 1年（非常推荐3年），109￥，可部署一套 docker、mysql、redis、rabbitmq、xxl-job、SpringBoot 分布式微服务项目。 
 - 2c8g 1年，328￥，适合部署小傅哥星球社群[大部分项目](https://bugstack.cn/md/zsxq/material/student-learn-advanced.html)，可以完成多个微服务项目部署。
 
-注意📢：购买选择系统时，推荐系统镜像，**centos 7.9**
+注意📢：购买选择系统时，推荐系统镜像，**centos 7.9** SSH 链接工具：[SSH Tool](https://bugstack.cn/md/road-map/tool.html)
 
 >如果自己账号不是新人身份，可以自己注册个新账号，用家里人JD扫码认证一下即可。
 
-🎁 礼物赠送，购买2c4g 3年的，赠送Joy公仔，邮寄到家！购买后，联系小傅哥（微信：fustack）
+🎁 礼物赠送，购买2c4g 3年的，赠送Joy公仔，邮寄到家！购买后，联系小傅哥（微信：`fustack`）
 
 ## 二、一键部署脚本
 
