@@ -197,26 +197,26 @@ sudo ./environment/maven/install-maven.sh -f -q
 
 ```bash
 # 交互式删除（推荐）
-sudo ./environment/jdk/remove-maven.sh
+sudo ./environment/maven/remove-maven.sh
 
 # 强制删除
-sudo ./environment/jdk/remove-maven.sh -f
+sudo ./environment/maven/remove-maven.sh -f
 
 # 静默删除
-sudo ./environment/jdk/remove-maven -f -q
+sudo ./environment/maven/remove-maven -f -q
 ```
 
 ### 3. Docker 安装脚本
 
-脚本位置： run_install_docker_local.sh
+脚本位置： run_install_docker_centos7.sh
 
-功能： 使用本地的 install_docker.sh 脚本安装 Docker
+功能： 使用本地的 install_docker_centos7_eol.sh 脚本安装 Docker
 
 执行方式：
 
 ```
 # 执行 Docker 安装
-./run_install_docker_local.sh
+./run_install_docker_centos7.sh
 ```
 注意事项：
 
@@ -308,13 +308,13 @@ sudo systemctl start docker
 2. 然后安装 Docker ：
 
    ```
-   ./run_install_docker_local.sh
+   ./run_install_docker_centos7.sh
    ```
 
-3. 然后安装 Docker ：
+3. 然后安装 Maven ：
 
    ```
-   ./install-maven.sh
+   sudo ./environment/maven/install-maven.sh
    ```
    
 4. 最后安装开发软件 ：
