@@ -8,3 +8,6 @@ Defaults    env_keep += "PATH JAVA_HOME"
 sudo -i
 echo "$PATH"                     # 应该含 /usr/local/bin
 command -v docker-compose        # 应该能找到
+
+加软链接
+sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
