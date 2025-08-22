@@ -132,7 +132,7 @@ detect_system() {
         OS=$(uname -s)
         VER=$(uname -r)
     fi
-    
+
     [[ $SILENT_MODE == false ]] && log_info "检测到系统: $OS $VER"
 }
 
@@ -141,7 +141,7 @@ check_existing_maven() {
     if command -v mvn >/dev/null 2>&1; then
         MAVEN_VERSION_CURRENT=$(mvn -version 2>/dev/null | head -n 1 | awk '{print $3}' || echo "未知")
         log_warning "检测到已安装的Maven版本: $MAVEN_VERSION_CURRENT"
-        
+
         if [[ $FORCE_INSTALL == false ]]; then
             read -p "是否继续安装? (y/N): " -n 1 -r
             echo
@@ -155,12 +155,21 @@ check_existing_maven() {
 
 # 检查Java环境
 check_java() {
+
+    # 首先尝试加载系统环境变量配置
+    if [[ -f "/etc/profile" ]]; then
+        source /etc/profile 2>/dev/null || true
+    fi
+    if [[ -f "/etc/bashrc" ]]; then
+        source /etc/bashrc 2>/dev/null || true
+    fi
+
     if ! command -v java >/dev/null 2>&1; then
         log_error "未检测到Java环境，Maven需要Java运行环境"
         log_info "请先安装JDK，然后再安装Maven"
         exit 1
     fi
-    
+
     JAVA_VERSION=$(java -version 2>&1 | head -n 1 | cut -d'"' -f2)
     [[ $SILENT_MODE == false ]] && log_info "检测到Java版本: $JAVA_VERSION"
 }
@@ -168,7 +177,7 @@ check_java() {
 # 安装依赖包
 install_dependencies() {
     [[ $SILENT_MODE == false ]] && log_info "检查并安装依赖包..."
-    
+
     if command -v yum >/dev/null 2>&1; then
         yum update -y >/dev/null 2>&1 || true
         yum install -y unzip >/dev/null 2>&1 || true
@@ -181,24 +190,24 @@ install_dependencies() {
 # 验证Maven包
 validate_package() {
     local package_path
-    
+
     if [[ -n "$CUSTOM_PACKAGE_PATH" ]]; then
         package_path="$CUSTOM_PACKAGE_PATH"
     else
         package_path="$SOURCE_DIR/$MAVEN_PACKAGE"
     fi
-    
+
     if [[ ! -f "$package_path" ]]; then
         # 获取脚本的完整绝对路径
         local script_dir=$(cd "$(dirname "$0")" && pwd)
-        
+
         log_error "Maven包不存在: $package_path"
         log_info "请下载Maven安装包并放置到正确位置:"
         log_info "下载地址: https://drive.weixin.qq.com/s?k=ACMA4AfQABUI0aRnml"
         log_info "下载完成后，请将 apache-maven-3.8.8.zip 文件放置到: $script_dir/"
         exit 1
     fi
-    
+
     # 验证包格式
     if ! unzip -t "$package_path" >/dev/null 2>&1; then
         log_error "Maven包格式无效或已损坏: $package_path"
@@ -206,7 +215,7 @@ validate_package() {
         log_info "下载地址: https://drive.weixin.qq.com/s?k=ACMA4AfQABUI0aRnml"
         exit 1
     fi
-    
+
     [[ $SILENT_MODE == false ]] && log_success "Maven包验证通过" >&2
     echo "$package_path"
 }
@@ -214,12 +223,12 @@ validate_package() {
 # 安装Maven
 install_maven() {
     local package_path=$1
-    
+
     [[ $SILENT_MODE == false ]] && log_info "开始安装Maven $MAVEN_VERSION 到: $INSTALL_DIR"
-    
+
     # 创建安装目录
     mkdir -p "$INSTALL_DIR"
-    
+
     # 备份现有安装
     if [[ -d "$INSTALL_DIR" ]] && [[ $(ls -A "$INSTALL_DIR" 2>/dev/null) ]]; then
         if [[ $FORCE_INSTALL == true ]]; then
@@ -230,7 +239,7 @@ install_maven() {
             exit 1
         fi
     fi
-    
+
     # 解压Maven
     [[ $SILENT_MODE == false ]] && log_info "解压Maven包..."
     if [[ $SILENT_MODE == true ]]; then
@@ -238,7 +247,7 @@ install_maven() {
     else
         unzip -q "$package_path" -d "$INSTALL_DIR"
     fi
-    
+
     # 移动文件到正确位置（去掉版本号目录）
     local maven_extracted_dir=$(find "$INSTALL_DIR" -maxdepth 1 -name "apache-maven-*" -type d | head -n 1)
     if [[ -n "$maven_extracted_dir" ]]; then
@@ -251,29 +260,29 @@ install_maven() {
         # 强制删除空目录
         rm -rf "$maven_extracted_dir"
     fi
-    
+
     # 验证安装
     if [[ ! -f "$INSTALL_DIR/bin/mvn" ]]; then
         log_error "Maven安装失败，mvn可执行文件不存在"
         exit 1
     fi
-    
+
     log_success "Maven解压完成"
 }
 
 # 配置环境变量
 configure_environment() {
     [[ $SILENT_MODE == false ]] && log_info "配置环境变量..."
-    
+
     # 备份配置文件
     if [[ -f "$PROFILE_FILE" ]]; then
         cp "$PROFILE_FILE" "$PROFILE_FILE.backup.$(date +%Y%m%d_%H%M%S)"
     fi
-    
+
     # 移除旧的Maven配置
     sed -i '/MAVEN_HOME/d' "$PROFILE_FILE" 2>/dev/null || true
     sed -i '/M2_HOME/d' "$PROFILE_FILE" 2>/dev/null || true
-    
+
     # 添加新的Maven配置
     cat >> "$PROFILE_FILE" << EOF
 
@@ -282,12 +291,12 @@ export MAVEN_HOME=$INSTALL_DIR
 export M2_HOME=$INSTALL_DIR
 export PATH=\$MAVEN_HOME/bin:\$PATH
 EOF
-    
+
     # 同时配置bashrc（某些系统需要）
     if [[ -f "$BASHRC_FILE" ]]; then
         sed -i '/MAVEN_HOME/d' "$BASHRC_FILE" 2>/dev/null || true
         sed -i '/M2_HOME/d' "$BASHRC_FILE" 2>/dev/null || true
-        
+
         cat >> "$BASHRC_FILE" << EOF
 
 # Maven Environment - Added by Maven installer
@@ -296,15 +305,15 @@ export M2_HOME=$INSTALL_DIR
 export PATH=\$MAVEN_HOME/bin:\$PATH
 EOF
     fi
-    
+
     # 立即在当前会话中生效环境变量
     export MAVEN_HOME="$INSTALL_DIR"
     export M2_HOME="$INSTALL_DIR"
     export PATH="$MAVEN_HOME/bin:$PATH"
-    
+
     # 重新加载配置文件
     source "$PROFILE_FILE" 2>/dev/null || true
-    
+
     log_success "环境变量配置完成"
     [[ $SILENT_MODE == false ]] && log_info "环境变量已在当前会话中生效"
 }
@@ -312,13 +321,13 @@ EOF
 # 验证安装
 verify_installation() {
     [[ $SILENT_MODE == false ]] && log_info "验证安装..."
-    
+
     # 重新加载环境变量
     source "$PROFILE_FILE" 2>/dev/null || true
     export MAVEN_HOME="$INSTALL_DIR"
     export M2_HOME="$INSTALL_DIR"
     export PATH="$MAVEN_HOME/bin:$PATH"
-    
+
     # 检查Maven版本
     if "$INSTALL_DIR/bin/mvn" -version >/dev/null 2>&1; then
         local maven_version=$("$INSTALL_DIR/bin/mvn" -version 2>&1 | head -n 1)
@@ -379,30 +388,30 @@ EOF
 # 主函数
 main() {
     [[ $SILENT_MODE == false ]] && log_info "开始Maven安装程序..."
-    
+
     check_root
     detect_system
     check_java
     check_existing_maven
     install_dependencies
-    
+
     local package_path=$(validate_package)
     install_maven "$package_path"
     configure_environment
     verify_installation
     show_installation_info
-    
+
     # 强制在脚本结束前再次设置环境变量
     export MAVEN_HOME="$INSTALL_DIR"
     export M2_HOME="$INSTALL_DIR"
     export PATH="$MAVEN_HOME/bin:$PATH"
-    
+
     if [[ $SILENT_MODE == false ]]; then
         cleanup
     fi
-    
+
     log_success "Maven $MAVEN_VERSION 安装完成!"
-    
+
     # 最后提示用户如何验证
     if [[ $SILENT_MODE == false ]]; then
         echo
