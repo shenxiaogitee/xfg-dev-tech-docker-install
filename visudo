@@ -1,0 +1,10 @@
+CentOS 7 默认的 secure_path 通常 不含 /usr/local/bin，所以你的脚本里
+
+sudo visudo
+
+Defaults    secure_path = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Defaults    env_keep += "PATH JAVA_HOME"
+
+sudo -i
+echo "$PATH"                     # 应该含 /usr/local/bin
+command -v docker-compose        # 应该能找到
