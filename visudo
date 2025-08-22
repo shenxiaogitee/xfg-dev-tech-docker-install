@@ -11,3 +11,13 @@ command -v docker-compose        # 应该能找到
 
 加软链接
 sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+
+# 看各自 PATH
+echo "$PATH"
+sudo env | grep ^PATH=
+# 看 compose 装在哪
+which docker-compose || true
+sudo which docker-compose || true
+docker compose version || true
+type -a docker-compose || true
