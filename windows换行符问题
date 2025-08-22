@@ -1,0 +1,10 @@
+典型的 Windows 换行符 问题：
+脚本里有 ^M（CRLF），Linux 解释器当成 /bin/bash^M，于是报 “bad interpreter”。
+你的 run_install_software.sh 就是这样（来自你传的脚本）。
+
+快速修复（选一个执行即可）
+方法 1：用 sed 去掉回车符
+
+sed -i 's/\r$//' run_install_software.sh
+chmod +x run_install_software.sh
+./run_install_software.sh
