@@ -127,6 +127,7 @@ services:
     command: rabbitmq-server
     volumes:
       - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
+      - .rabbitmq/plugins/rabbitmq_delayed_message_exchange-3.12.0.ez:/plugins/rabbitmq_delayed_message_exchange-3.12.0.ez:ro
     networks:
       - my-network
 

@@ -1,1 +1,1 @@
-[rabbitmq_management].
+[rabbitmq_management, rabbitmq_tracing, rabbitmq_prometheus, rabbitmq_delayed_message_exchange].
