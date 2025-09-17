@@ -1,0 +1,22 @@
+# 进入容器
+docker exec -it es-container-name bash
+
+# 在容器里执行安装
+elasticsearch-plugin install --batch \
+  https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v7.17.28/elasticsearch-analysis-ik-7.17.28.zip
+
+# 退出容器
+exit
+
+# 重启容器
+docker restart es-container-name
+
+验证
+http://localhost:9200/_cat/plugins?v
+
+测试分词效果
+curl -X POST "http://localhost:9200/_analyze?pretty" -H 'Content-Type: application/json' -d'
+{
+  "analyzer": "ik_max_word",
+  "text": "中华人民共和国"
+}'
